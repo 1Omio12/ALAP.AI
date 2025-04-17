@@ -1,33 +1,4 @@
-<script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row =>
-                    row.some(cell => cell !== '' && cell !== null && cell !== undefined)
-                );
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
-        }
-        return gk_fileData[filename] || "";
-        }
-        </script><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -147,66 +118,6 @@
       margin-right: 8px;
       opacity: 0.7;
     }
-
-    /* Responsive styles */
-    @media (max-width: 768px) {
-      body {
-        padding: 10px;
-      }
-      h1 {
-        font-size: 1.8em;
-      }
-      h2 {
-        font-size: 1.2em;
-      }
-      .controls input {
-        width: 80px;
-      }
-      .controls button {
-        padding: 8px 16px;
-      }
-      #chart-container {
-        padding: 10px;
-      }
-      #map {
-        height: 400px;
-      }
-      img[alt="MIST Logo"] {
-        height: 50px;
-        top: 10px;
-        left: 10px;
-      }
-      #latest-radiation {
-        font-size: 1.2em;
-        padding: 10px;
-      }
-      .info {
-        font-size: 0.8em;
-      }
-      .legend {
-        font-size: 0.8em;
-        padding: 5px;
-      }
-      .legend i {
-        width: 12px;
-        height: 12px;
-        margin-right: 5px;
-      }
-    }
-
-    @media (max-width: 480px) {
-      .controls {
-        flex-direction: column;
-        align-items: stretch;
-      }
-      .controls label, .controls input, .controls button {
-        width: 100%;
-        margin-bottom: 10px;
-      }
-      #map {
-        height: 300px;
-      }
-    }
   </style>
 </head>
 <body>
@@ -317,13 +228,14 @@
           var times = [];
           var radiations = [];
 
+          var sumLat = 0, sumLon = 0, count = 0;
+
           data.feeds.forEach(feed => {
             var lat = parseFloat(feed.field4);
             var lon = parseFloat(feed.field5);
             var radiation = parseFloat(feed.field3);
             var time = feed.created_at;
 
-            // Filter points to only include those within or near Bangladesh
             if (!isNaN(lat) && !isNaN(lon) && 
                 lat >= 20.5 && lat <= 26.7 && 
                 lon >= 88.0 && lon <= 92.7) {
@@ -341,6 +253,10 @@
                 fillOpacity: 0.8
               }).addTo(markers);
               marker.bindPopup(`Radiation: ${radiation} µSv/h<br>Time: ${time}`);
+
+              sumLat += lat;
+              sumLon += lon;
+              count++;
             }
           });
 
@@ -358,8 +274,11 @@
           radiationChart.data.datasets[0].data = radiations;
           radiationChart.update();
 
-          if (markers.getLayers().length > 0) {
-            map.fitBounds(markers.getBounds(), { maxZoom: 15 });
+          // Center to average lat/lon
+          if (count > 0) {
+            var avgLat = sumLat / count;
+            var avgLon = sumLon / count;
+            map.setView([avgLat, avgLon], 13); // Zoom level ~10 km
           }
         })
         .catch(error => console.error('Error fetching data:', error));
@@ -375,7 +294,6 @@
     }
 
     fetchData(8000);
-
     setInterval(() => {
       var numPoints = document.getElementById('points').value;
       fetchData(numPoints);
